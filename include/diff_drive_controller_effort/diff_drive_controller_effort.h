@@ -46,6 +46,7 @@
 #include <diff_drive_controller_effort/speed_limiter.h>
 #include <dynamic_reconfigure/server.h>
 #include <std_msgs/Float32MultiArray.h>
+#include <geometry_msgs/TwistStamped.h>
 #include <hardware_interface/joint_command_interface.h>
 #include <memory>
 #include <nav_msgs/Odometry.h>
@@ -105,7 +106,6 @@ namespace diff_drive_controller_effort{
     /// Odometry related:
     ros::Duration publish_period_;
     ros::Time last_state_publish_time_;
-    bool open_loop_;
 
     /// Hardware handles:
     std::vector<hardware_interface::JointHandle> left_wheel_joints_;
@@ -125,11 +125,11 @@ namespace diff_drive_controller_effort{
     /// Velocity command related:
     struct Commands
     {
-      double lin;
-      double ang;
+      double right_torque;
+      double left_torque;
       ros::Time stamp;
 
-      Commands() : lin(0.0), ang(0.0), stamp(0.0) {}
+      Commands() : right_torque(0.0), left_torque(0.0), stamp(0.0) {}
     };
     realtime_tools::RealtimeBuffer<Commands> command_;
     Commands command_struct_;
@@ -161,7 +161,7 @@ namespace diff_drive_controller_effort{
     double cmd_vel_timeout_;
 
     /// Whether to allow multiple publishers on cmd_vel topic or not:
-    bool allow_multiple_cmd_vel_publishers_;
+    bool allow_multiple_torque_publishers_;
 
     /// Frame to use for the robot base:
     std::string base_frame_id_;
@@ -243,10 +243,10 @@ namespace diff_drive_controller_effort{
     void brake();
 
     /**
-     * \brief Velocity command callback
-     * \param command Velocity command message (twist)
+     * \brief Torque command callback
+     * \param command Torque command message (Float32 [right_wheel_torque, left_wheel_torque])
      */
-    void cmdTorqueCallback(const geometry_msgs::Twist& command);
+    void cmdTorqueCallback(const std_msgs::Float32MultiArray& command);
 
     /**
      * \brief Get the wheel names from a wheel param

@@ -111,18 +111,6 @@ namespace diff_drive_controller_effort
     return true;
   }
 
-  void Odometry::updateOpenLoop(double linear, double angular, const ros::Time &time)
-  {
-    /// Save last linear and angular velocity:
-    linear_ = linear;
-    angular_ = angular;
-
-    /// Integrate odometry:
-    const double dt = (time - timestamp_).toSec();
-    timestamp_ = time;
-    integrate_fun_(linear * dt, angular * dt);
-  }
-
   void Odometry::setWheelParams(double wheel_separation, double left_wheel_radius, double right_wheel_radius)
   {
     wheel_separation_   = wheel_separation;

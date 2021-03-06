@@ -145,15 +145,14 @@ static bool getWheelRadius(const urdf::LinkConstSharedPtr& wheel_link, double& w
 namespace diff_drive_controller_effort{
 
   DiffDriveControllerEffort::DiffDriveControllerEffort()
-    : open_loop_(false)
-    , command_struct_()
+    : command_struct_()
     , wheel_separation_(0.0)
     , wheel_radius_(0.0)
     , wheel_separation_multiplier_(1.0)
     , left_wheel_radius_multiplier_(1.0)
     , right_wheel_radius_multiplier_(1.0)
     , cmd_vel_timeout_(0.5)
-    , allow_multiple_cmd_vel_publishers_(true)
+    , allow_multiple_torque_publishers_(true)
     , base_frame_id_("base_link")
     , odom_frame_id_("odom")
     , enable_odom_tf_(true)
@@ -201,8 +200,6 @@ namespace diff_drive_controller_effort{
                           << publish_rate << "Hz.");
     publish_period_ = ros::Duration(1.0 / publish_rate);
 
-    controller_nh.param("open_loop", open_loop_, open_loop_);
-
     controller_nh.param("wheel_separation_multiplier", wheel_separation_multiplier_, wheel_separation_multiplier_);
     ROS_INFO_STREAM_NAMED(name_, "Wheel separation will be multiplied by "
                           << wheel_separation_multiplier_ << ".");
@@ -238,9 +235,9 @@ namespace diff_drive_controller_effort{
     ROS_INFO_STREAM_NAMED(name_, "Velocity commands will be considered old if they are older than "
                           << cmd_vel_timeout_ << "s.");
 
-    controller_nh.param("allow_multiple_cmd_vel_publishers", allow_multiple_cmd_vel_publishers_, allow_multiple_cmd_vel_publishers_);
+    controller_nh.param("allow_multiple_torque_publishers", allow_multiple_torque_publishers_, allow_multiple_torque_publishers_);
     ROS_INFO_STREAM_NAMED(name_, "Allow mutiple cmd_vel publishers is "
-                          << (allow_multiple_cmd_vel_publishers_?"enabled":"disabled"));
+                          << (allow_multiple_torque_publishers_?"enabled":"disabled"));
 
     controller_nh.param("base_frame_id", base_frame_id_, base_frame_id_);
     ROS_INFO_STREAM_NAMED(name_, "Base frame_id set to " << base_frame_id_);
@@ -400,30 +397,33 @@ namespace diff_drive_controller_effort{
     odometry_.setWheelParams(ws, lwr, rwr);
 
     // COMPUTE AND PUBLISH ODOMETRY
+    /*
     if (open_loop_)
     {
-      odometry_.updateOpenLoop(last0_cmd_.lin, last0_cmd_.ang, time);
+      odometry_.updateOpenLoop(last0_cmd_.lin, last0_cmd_.left_torque, time);
     }
     else
     {
-      double left_pos  = 0.0;
-      double right_pos = 0.0;
-      for (size_t i = 0; i < wheel_joints_size_; ++i)
-      {
-        const double lp = left_wheel_joints_[i].getPosition();
-        const double rp = right_wheel_joints_[i].getPosition();
-        if (std::isnan(lp) || std::isnan(rp))
-          return;
-
-        left_pos  += lp;
-        right_pos += rp;
-      }
-      left_pos  /= wheel_joints_size_;
-      right_pos /= wheel_joints_size_;
-
-      // Estimate linear and angular velocity using joint information
-      odometry_.update(left_pos, right_pos, time);
     }
+    */
+    
+    double left_pos  = 0.0;
+    double right_pos = 0.0;
+    for (size_t i = 0; i < wheel_joints_size_; ++i)
+    {
+      const double lp = left_wheel_joints_[i].getPosition();
+      const double rp = right_wheel_joints_[i].getPosition();
+      if (std::isnan(lp) || std::isnan(rp))
+        return;
+
+      left_pos  += lp;
+      right_pos += rp;
+    }
+    left_pos  /= wheel_joints_size_;
+    right_pos /= wheel_joints_size_;
+
+    // Estimate linear and angular velocity using joint information
+    odometry_.update(left_pos, right_pos, time);
 
     // Publish odometry message
     if (last_state_publish_time_ + publish_period_ < time)
@@ -465,37 +465,24 @@ namespace diff_drive_controller_effort{
     // Brake if cmd_vel has timeout:
     if (dt > cmd_vel_timeout_)
     {
-      curr_cmd.lin = 0.0;
-      curr_cmd.ang = 0.0;
+      curr_cmd.right_torque = 0.0;
+      curr_cmd.left_torque = 0.0;
     }
 
     // Limit velocities and accelerations:
     const double cmd_dt(period.toSec());
 
-    limiter_lin_.limit(curr_cmd.lin, last0_cmd_.lin, last1_cmd_.lin, cmd_dt);
-    limiter_ang_.limit(curr_cmd.ang, last0_cmd_.ang, last1_cmd_.ang, cmd_dt);
+    limiter_lin_.limit(curr_cmd.lin, last0_cmd_.right_torque, last1_cmd_.right_torque, cmd_dt);
+    limiter_ang_.limit(curr_cmd.left_torque, last0_cmd_.left_torque, last1_cmd_.left_torque, cmd_dt);
 
     last1_cmd_ = last0_cmd_;
     last0_cmd_ = curr_cmd;
 
-    // Publish limited velocity:
-    if (publish_cmd_ && cmd_vel_pub_ && cmd_vel_pub_->trylock())
-    {
-      cmd_vel_pub_->msg_.header.stamp = time;
-      cmd_vel_pub_->msg_.twist.linear.x = curr_cmd.lin;
-      cmd_vel_pub_->msg_.twist.angular.z = curr_cmd.ang;
-      cmd_vel_pub_->unlockAndPublish();
-    }
-
-    // Compute wheels velocities:
-    const double vel_left  = (curr_cmd.lin - curr_cmd.ang * ws / 2.0)/lwr;
-    const double vel_right = (curr_cmd.lin + curr_cmd.ang * ws / 2.0)/rwr;
-
     // Set wheels velocities:
     for (size_t i = 0; i < wheel_joints_size_; ++i)
     {
-      left_wheel_joints_[i].setCommand(vel_left);
-      right_wheel_joints_[i].setCommand(vel_right);
+      right_wheel_joints_[i].setCommand(curr_cmd.right_torque);
+      left_wheel_joints_[i].setCommand(curr_cmd.left_torque);
     }
 
     publishWheelData(time, period, curr_cmd, ws, lwr, rwr);
@@ -528,12 +515,12 @@ namespace diff_drive_controller_effort{
     }
   }
 
-  void DiffDriveControllerEffort::cmdTorqueCallback(const geometry_msgs::Twist& command)
+  void DiffDriveControllerEffort::cmdTorqueCallback(const std_msgs::Float32MultiArray & command)
   {
     if (isRunning())
     {
       // check that we don't have multiple publishers on the command topic
-      if (!allow_multiple_cmd_vel_publishers_ && sub_command_.getNumPublishers() > 1)
+      if (!allow_multiple_torque_publishers_ && sub_command_.getNumPublishers() > 1)
       {
         ROS_ERROR_STREAM_THROTTLE_NAMED(1.0, name_, "Detected " << sub_command_.getNumPublishers()
             << " publishers. Only 1 publisher is allowed. Going to brake.");
@@ -541,20 +528,20 @@ namespace diff_drive_controller_effort{
         return;
       }
 
-      if(!std::isfinite(command.angular.z) || !std::isfinite(command.linear.x))
+      if(!std::isfinite(command.data[0]) || !std::isfinite(command.data[1]))
       {
         ROS_WARN_THROTTLE(1.0, "Received NaN in velocity command. Ignoring.");
         return;
       }
 
-      command_struct_.ang   = command.angular.z;
-      command_struct_.lin   = command.linear.x;
+      command_struct_.right_torque  = command.data[0];
+      command_struct_.left_torque  = command.data[1];
       command_struct_.stamp = ros::Time::now();
       command_.writeFromNonRT (command_struct_);
       ROS_DEBUG_STREAM_NAMED(name_,
                              "Added values to command. "
-                             << "Ang: "   << command_struct_.ang << ", "
-                             << "Lin: "   << command_struct_.lin << ", "
+                             << "right_torque: "   << command_struct_.right_torque << ", "
+                             << "left_torque: "   << command_struct_.left_torque << ", "
                              << "Stamp: " << command_struct_.stamp);
     }
     else
@@ -769,8 +756,8 @@ namespace diff_drive_controller_effort{
       const double cmd_dt(period.toSec());
 
       // Compute desired wheels velocities, that is before applying limits:
-      const double vel_left_desired  = (curr_cmd.lin - curr_cmd.ang * wheel_separation / 2.0) / left_wheel_radius;
-      const double vel_right_desired = (curr_cmd.lin + curr_cmd.ang * wheel_separation / 2.0) / right_wheel_radius;
+      const double vel_left_desired  = (curr_cmd.lin - curr_cmd.left_torque * wheel_separation / 2.0) / left_wheel_radius;
+      const double vel_right_desired = (curr_cmd.lin + curr_cmd.left_torque * wheel_separation / 2.0) / right_wheel_radius;
       controller_state_pub_->msg_.header.stamp = time;
 
       for (size_t i = 0; i < wheel_joints_size_; ++i)
