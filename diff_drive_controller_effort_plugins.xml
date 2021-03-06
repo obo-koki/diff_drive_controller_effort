@@ -1,0 +1,9 @@
+<library path="lib/libdiff_drive_controller_effort">
+
+  <class name="diff_drive_controller_effort/DiffDriveControllerEffort" type="diff_drive_controller_effort::DiffDriveControllerEffort" base_class_type="controller_interface::ControllerBase">
+    <description>
+      The DiffDriveControllerEffort tracks torque commands. It expects 2 EffortJointInterface type of hardware interfaces.
+    </description>
+  </class>
+
+</library>
