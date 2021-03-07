@@ -43,7 +43,7 @@
 #include <controller_interface/controller.h>
 #include <diff_drive_controller_effort/DiffDriveControllerEffortConfig.h>
 #include <diff_drive_controller_effort/odometry.h>
-#include <diff_drive_controller_effort/speed_limiter.h>
+#include <diff_drive_controller_effort/torque_limiter.h>
 #include <dynamic_reconfigure/server.h>
 #include <std_msgs/Float32MultiArray.h>
 #include <geometry_msgs/TwistStamped.h>
@@ -73,7 +73,7 @@ namespace diff_drive_controller_effort{
 
     /**
      * \brief Initialize controller
-     * \param hw            Velocity joint interface for the wheels
+     * \param hw            Effort joint interface for the wheels
      * \param root_nh       Node handle at root namespace
      * \param controller_nh Node handle inside the controller namespace
      */
@@ -135,9 +135,6 @@ namespace diff_drive_controller_effort{
     Commands command_struct_;
     ros::Subscriber sub_command_;
 
-    /// Publish executed commands
-    std::shared_ptr<realtime_tools::RealtimePublisher<geometry_msgs::TwistStamped> > cmd_vel_pub_;
-
     /// Odometry related:
     std::shared_ptr<realtime_tools::RealtimePublisher<nav_msgs::Odometry> > odom_pub_;
     std::shared_ptr<realtime_tools::RealtimePublisher<tf::tfMessage> > tf_odom_pub_;
@@ -157,8 +154,8 @@ namespace diff_drive_controller_effort{
     double left_wheel_radius_multiplier_;
     double right_wheel_radius_multiplier_;
 
-    /// Timeout to consider cmd_vel commands old:
-    double cmd_vel_timeout_;
+    /// Timeout to consider cmd_torque commands old:
+    double cmd_torque_timeout_;
 
     /// Whether to allow multiple publishers on cmd_vel topic or not:
     bool allow_multiple_torque_publishers_;
@@ -175,14 +172,10 @@ namespace diff_drive_controller_effort{
     /// Number of wheel joints:
     size_t wheel_joints_size_;
 
-    /// Speed limiters:
+    /// Torque limiters:
     Commands last1_cmd_;
     Commands last0_cmd_;
-    SpeedLimiter limiter_lin_;
-    SpeedLimiter limiter_ang_;
-
-    /// Publish limited velocity:
-    bool publish_cmd_;
+    TorqueLimiter limiter_;
 
     /// Publish wheel data:
     bool publish_wheel_joint_controller_state_;
@@ -197,8 +190,6 @@ namespace diff_drive_controller_effort{
       double right_wheel_radius_multiplier;
       double wheel_separation_multiplier;
 
-      bool publish_cmd;
-
       double publish_rate;
       bool enable_odom_tf;
 
@@ -206,7 +197,6 @@ namespace diff_drive_controller_effort{
         : left_wheel_radius_multiplier(1.0)
         , right_wheel_radius_multiplier(1.0)
         , wheel_separation_multiplier(1.0)
-        , publish_cmd(false)
         , publish_rate(50)
         , enable_odom_tf(true)
       {}
@@ -221,7 +211,6 @@ namespace diff_drive_controller_effort{
            << "\t\twheel separation multiplier: "    << params.wheel_separation_multiplier   << "\n"
            //
            << "\tPublication parameters:\n"
-           << "\t\tPublish executed velocity command: " << (params.publish_cmd?"enabled":"disabled") << "\n"
            << "\t\tPublication rate: " << params.publish_rate                 << "\n"
            << "\t\tPublish frame odom on tf: " << (params.enable_odom_tf?"enabled":"disabled");
 
@@ -238,7 +227,7 @@ namespace diff_drive_controller_effort{
 
   private:
     /**
-     * \brief Brakes the wheels, i.e. sets the velocity to 0
+     * \brief Brakes the wheels, i.e. sets the torque to 0
      */
     void brake();
 
@@ -301,12 +290,14 @@ namespace diff_drive_controller_effort{
      * \param left_wheel_radius left wheel radius with multiplier
      * \param right_wheel_radius right wheel radius with multiplier
      */
+    /*
     void publishWheelData(const ros::Time& time,
                           const ros::Duration& period,
                           Commands& curr_cmd,
                           double wheel_separation,
                           double left_wheel_radius,
                           double right_wheel_radius);
+    */
   };
 
 } // namespace diff_drive_controller_effort

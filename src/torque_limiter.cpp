@@ -38,7 +38,7 @@
 
 #include <algorithm>
 
-#include <diff_drive_controller_effort/speed_limiter.h>
+#include <diff_drive_controller_effort/torque_limiter.h>
 
 template<typename T>
 T clamp(T x, T min, T max)
@@ -49,52 +49,56 @@ T clamp(T x, T min, T max)
 namespace diff_drive_controller_effort
 {
 
-  SpeedLimiter::SpeedLimiter(
-    bool has_velocity_limits,
+  TorqueLimiter::TorqueLimiter(
+    bool has_torque_limits,
+    double min_torque,
+    double max_torque
+    /*
     bool has_acceleration_limits,
     bool has_jerk_limits,
-    double min_velocity,
-    double max_velocity,
     double min_acceleration,
     double max_acceleration,
     double min_jerk,
     double max_jerk
+    */
   )
-  : has_velocity_limits(has_velocity_limits)
+  : has_torque_limits(has_torque_limits)
+  , min_torque(min_torque)
+  , max_torque(max_torque)
+  /*
   , has_acceleration_limits(has_acceleration_limits)
   , has_jerk_limits(has_jerk_limits)
-  , min_velocity(min_velocity)
-  , max_velocity(max_velocity)
   , min_acceleration(min_acceleration)
   , max_acceleration(max_acceleration)
   , min_jerk(min_jerk)
   , max_jerk(max_jerk)
+  */
   {
   }
 
-  double SpeedLimiter::limit(double& v, double v0, double v1, double dt)
+  double TorqueLimiter::limit(double& t, double t0, double t1, double dt)
   {
-    const double tmp = v;
+    const double tmp = t;
 
-    limit_jerk(v, v0, v1, dt);
-    limit_acceleration(v, v0, dt);
-    limit_velocity(v);
+    ///limit_jerk(v, v0, v1, dt);
+    ///limit_acceleration(v, v0, dt);
+    limit_torque(t);
 
-    return tmp != 0.0 ? v / tmp : 1.0;
+    return tmp != 0.0 ? t / tmp : 1.0;
   }
 
-  double SpeedLimiter::limit_velocity(double& v)
+  double TorqueLimiter::limit_torque(double& t)
   {
-    const double tmp = v;
+    const double tmp = t;
 
-    if (has_velocity_limits)
+    if (has_torque_limits)
     {
-      v = clamp(v, min_velocity, max_velocity);
+      t = clamp(t, min_torque, max_torque);
     }
 
-    return tmp != 0.0 ? v / tmp : 1.0;
+    return tmp != 0.0 ? t / tmp : 1.0;
   }
-
+  /*
   double SpeedLimiter::limit_acceleration(double& v, double v0, double dt)
   {
     const double tmp = v;
@@ -133,5 +137,6 @@ namespace diff_drive_controller_effort
 
     return tmp != 0.0 ? v / tmp : 1.0;
   }
+  */
 
 } // namespace diff_drive_controller_effort

@@ -151,13 +151,12 @@ namespace diff_drive_controller_effort{
     , wheel_separation_multiplier_(1.0)
     , left_wheel_radius_multiplier_(1.0)
     , right_wheel_radius_multiplier_(1.0)
-    , cmd_vel_timeout_(0.5)
+    , cmd_torque_timeout_(0.5)
     , allow_multiple_torque_publishers_(true)
     , base_frame_id_("base_link")
     , odom_frame_id_("odom")
     , enable_odom_tf_(true)
     , wheel_joints_size_(0)
-    , publish_cmd_(false)
     , publish_wheel_joint_controller_state_(false)
   {
   }
@@ -231,12 +230,12 @@ namespace diff_drive_controller_effort{
     odometry_.setVelocityRollingWindowSize(velocity_rolling_window_size);
 
     // Twist command related:
-    controller_nh.param("cmd_vel_timeout", cmd_vel_timeout_, cmd_vel_timeout_);
-    ROS_INFO_STREAM_NAMED(name_, "Velocity commands will be considered old if they are older than "
-                          << cmd_vel_timeout_ << "s.");
+    controller_nh.param("cmd_torque_timeout", cmd_torque_timeout_, cmd_torque_timeout_);
+    ROS_INFO_STREAM_NAMED(name_, "Torque commands will be considered old if they are older than "
+                          << cmd_torque_timeout_ << "s.");
 
     controller_nh.param("allow_multiple_torque_publishers", allow_multiple_torque_publishers_, allow_multiple_torque_publishers_);
-    ROS_INFO_STREAM_NAMED(name_, "Allow mutiple cmd_vel publishers is "
+    ROS_INFO_STREAM_NAMED(name_, "Allow mutiple torque_vel publishers is "
                           << (allow_multiple_torque_publishers_?"enabled":"disabled"));
 
     controller_nh.param("base_frame_id", base_frame_id_, base_frame_id_);
@@ -249,28 +248,18 @@ namespace diff_drive_controller_effort{
     ROS_INFO_STREAM_NAMED(name_, "Publishing to tf is " << (enable_odom_tf_?"enabled":"disabled"));
 
     // Velocity and acceleration limits:
-    controller_nh.param("linear/x/has_velocity_limits"    , limiter_lin_.has_velocity_limits    , limiter_lin_.has_velocity_limits    );
-    controller_nh.param("linear/x/has_acceleration_limits", limiter_lin_.has_acceleration_limits, limiter_lin_.has_acceleration_limits);
-    controller_nh.param("linear/x/has_jerk_limits"        , limiter_lin_.has_jerk_limits        , limiter_lin_.has_jerk_limits        );
-    controller_nh.param("linear/x/max_velocity"           , limiter_lin_.max_velocity           ,  limiter_lin_.max_velocity          );
-    controller_nh.param("linear/x/min_velocity"           , limiter_lin_.min_velocity           , -limiter_lin_.max_velocity          );
-    controller_nh.param("linear/x/max_acceleration"       , limiter_lin_.max_acceleration       ,  limiter_lin_.max_acceleration      );
-    controller_nh.param("linear/x/min_acceleration"       , limiter_lin_.min_acceleration       , -limiter_lin_.max_acceleration      );
-    controller_nh.param("linear/x/max_jerk"               , limiter_lin_.max_jerk               ,  limiter_lin_.max_jerk              );
-    controller_nh.param("linear/x/min_jerk"               , limiter_lin_.min_jerk               , -limiter_lin_.max_jerk              );
+    controller_nh.param("/has_torque_limits"    , limiter_.has_torque_limits    , limiter_.has_torque_limits    );
+    controller_nh.param("/max_torque"           , limiter_.max_torque           ,  limiter_.max_torque          );
+    controller_nh.param("/min_torque"           , limiter_.min_torque           , -limiter_.max_torque          );
 
-    controller_nh.param("angular/z/has_velocity_limits"    , limiter_ang_.has_velocity_limits    , limiter_ang_.has_velocity_limits    );
-    controller_nh.param("angular/z/has_acceleration_limits", limiter_ang_.has_acceleration_limits, limiter_ang_.has_acceleration_limits);
-    controller_nh.param("angular/z/has_jerk_limits"        , limiter_ang_.has_jerk_limits        , limiter_ang_.has_jerk_limits        );
-    controller_nh.param("angular/z/max_velocity"           , limiter_ang_.max_velocity           ,  limiter_ang_.max_velocity          );
-    controller_nh.param("angular/z/min_velocity"           , limiter_ang_.min_velocity           , -limiter_ang_.max_velocity          );
-    controller_nh.param("angular/z/max_acceleration"       , limiter_ang_.max_acceleration       ,  limiter_ang_.max_acceleration      );
-    controller_nh.param("angular/z/min_acceleration"       , limiter_ang_.min_acceleration       , -limiter_ang_.max_acceleration      );
-    controller_nh.param("angular/z/max_jerk"               , limiter_ang_.max_jerk               ,  limiter_ang_.max_jerk              );
-    controller_nh.param("angular/z/min_jerk"               , limiter_ang_.min_jerk               , -limiter_ang_.max_jerk              );
-
-    // Publish limited velocity:
-    controller_nh.param("publish_cmd", publish_cmd_, publish_cmd_);
+    /*
+    controller_nh.param("linear/x/has_acceleration_limits", limiter_.has_acceleration_limits, limiter_.has_acceleration_limits);
+    controller_nh.param("linear/x/has_jerk_limits"        , limiter_.has_jerk_limits        , limiter_.has_jerk_limits        );
+    controller_nh.param("linear/x/max_acceleration"       , limiter_.max_acceleration       ,  limiter_.max_acceleration      );
+    controller_nh.param("linear/x/min_acceleration"       , limiter_.min_acceleration       , -limiter_.max_acceleration      );
+    controller_nh.param("linear/x/max_jerk"               , limiter_.max_jerk               ,  limiter_.max_jerk              );
+    controller_nh.param("linear/x/min_jerk"               , limiter_.min_jerk               , -limiter_.max_jerk              );
+    */
 
     // Publish wheel data:
     controller_nh.param("publish_wheel_joint_controller_state", publish_wheel_joint_controller_state_, publish_wheel_joint_controller_state_);
@@ -299,12 +288,8 @@ namespace diff_drive_controller_effort{
                           << ", left wheel radius "  << lwr
                           << ", right wheel radius " << rwr);
 
-    if (publish_cmd_)
-    {
-      cmd_vel_pub_.reset(new realtime_tools::RealtimePublisher<geometry_msgs::TwistStamped>(controller_nh, "cmd_vel_out", 100));
-    }
-
     // Wheel joint controller state:
+    /*
     if (publish_wheel_joint_controller_state_)
     {
       controller_state_pub_.reset(new realtime_tools::RealtimePublisher<control_msgs::JointTrajectoryControllerState>(controller_nh, "wheel_joint_controller_state", 100));
@@ -337,6 +322,7 @@ namespace diff_drive_controller_effort{
       vel_left_previous_.resize(wheel_joints_size_, 0.0);
       vel_right_previous_.resize(wheel_joints_size_, 0.0);
     }
+    */
 
     setOdomPubFields(root_nh, controller_nh);
 
@@ -396,17 +382,6 @@ namespace diff_drive_controller_effort{
 
     odometry_.setWheelParams(ws, lwr, rwr);
 
-    // COMPUTE AND PUBLISH ODOMETRY
-    /*
-    if (open_loop_)
-    {
-      odometry_.updateOpenLoop(last0_cmd_.lin, last0_cmd_.left_torque, time);
-    }
-    else
-    {
-    }
-    */
-    
     double left_pos  = 0.0;
     double right_pos = 0.0;
     for (size_t i = 0; i < wheel_joints_size_; ++i)
@@ -463,7 +438,7 @@ namespace diff_drive_controller_effort{
     const double dt = (time - curr_cmd.stamp).toSec();
 
     // Brake if cmd_vel has timeout:
-    if (dt > cmd_vel_timeout_)
+    if (dt > cmd_torque_timeout_)
     {
       curr_cmd.right_torque = 0.0;
       curr_cmd.left_torque = 0.0;
@@ -472,8 +447,8 @@ namespace diff_drive_controller_effort{
     // Limit velocities and accelerations:
     const double cmd_dt(period.toSec());
 
-    limiter_lin_.limit(curr_cmd.lin, last0_cmd_.right_torque, last1_cmd_.right_torque, cmd_dt);
-    limiter_ang_.limit(curr_cmd.left_torque, last0_cmd_.left_torque, last1_cmd_.left_torque, cmd_dt);
+    limiter_.limit(curr_cmd.right_torque, last0_cmd_.right_torque, last1_cmd_.right_torque, cmd_dt);
+    limiter_.limit(curr_cmd.left_torque, last0_cmd_.left_torque, last1_cmd_.left_torque, cmd_dt);
 
     last1_cmd_ = last0_cmd_;
     last0_cmd_ = curr_cmd;
@@ -484,8 +459,8 @@ namespace diff_drive_controller_effort{
       right_wheel_joints_[i].setCommand(curr_cmd.right_torque);
       left_wheel_joints_[i].setCommand(curr_cmd.left_torque);
     }
-
-    publishWheelData(time, period, curr_cmd, ws, lwr, rwr);
+    
+    ///publishWheelData(time, period, curr_cmd, ws, lwr, rwr);
     time_previous_ = time;
   }
 
@@ -530,7 +505,13 @@ namespace diff_drive_controller_effort{
 
       if(!std::isfinite(command.data[0]) || !std::isfinite(command.data[1]))
       {
-        ROS_WARN_THROTTLE(1.0, "Received NaN in velocity command. Ignoring.");
+        ROS_WARN_THROTTLE(1.0, "Received NaN in torque command. Ignoring.");
+        return;
+      }
+
+      if(command.data.size() != 2)
+      {
+        ROS_WARN_THROTTLE(1.0, "Received wrong type torque command. Ignoring.");
         return;
       }
 
@@ -748,6 +729,7 @@ namespace diff_drive_controller_effort{
     enable_odom_tf_ = dynamic_params.enable_odom_tf;
   }
 
+  /*
   void DiffDriveControllerEffort::publishWheelData(const ros::Time& time, const ros::Duration& period, Commands& curr_cmd,
           double wheel_separation, double left_wheel_radius, double right_wheel_radius)
   {
@@ -818,6 +800,7 @@ namespace diff_drive_controller_effort{
       controller_state_pub_->unlockAndPublish();
     }
   }
+  */
 
 } // namespace diff_drive_controller_effort
 

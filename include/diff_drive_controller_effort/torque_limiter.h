@@ -42,50 +42,53 @@
 namespace diff_drive_controller_effort
 {
 
-  class SpeedLimiter
+  class TorqueLimiter
   {
   public:
 
     /**
      * \brief Constructor
-     * \param [in] has_velocity_limits     if true, applies velocity limits
+     * \param [in] has_torque_limits     if true, applies velocity limits
+     * \param [in] min_torque Minimum velocity [m/s], usually <= 0
+     * \param [in] max_torque Maximum velocity [m/s], usually >= 0
+     * 
      * \param [in] has_acceleration_limits if true, applies acceleration limits
      * \param [in] has_jerk_limits         if true, applies jerk limits
-     * \param [in] min_velocity Minimum velocity [m/s], usually <= 0
-     * \param [in] max_velocity Maximum velocity [m/s], usually >= 0
      * \param [in] min_acceleration Minimum acceleration [m/s^2], usually <= 0
      * \param [in] max_acceleration Maximum acceleration [m/s^2], usually >= 0
      * \param [in] min_jerk Minimum jerk [m/s^3], usually <= 0
      * \param [in] max_jerk Maximum jerk [m/s^3], usually >= 0
      */
-    SpeedLimiter(
-      bool has_velocity_limits = false,
+    TorqueLimiter(
+      bool has_torque_limits = false,
+      double min_torque = 0.0,
+      double max_torque = 0.0
+      /*
       bool has_acceleration_limits = false,
       bool has_jerk_limits = false,
-      double min_velocity = 0.0,
-      double max_velocity = 0.0,
       double min_acceleration = 0.0,
       double max_acceleration = 0.0,
       double min_jerk = 0.0,
       double max_jerk = 0.0
+      */
     );
 
     /**
      * \brief Limit the velocity and acceleration
-     * \param [in, out] v  Velocity [m/s]
-     * \param [in]      v0 Previous velocity to v  [m/s]
-     * \param [in]      v1 Previous velocity to v0 [m/s]
+     * \param [in, out] t  Torque [N・m]
+     * \param [in]      t0 Previous torque to t  [N・m]
+     * \param [in]      t1 Previous torque to t0 [N・m]
      * \param [in]      dt Time step [s]
      * \return Limiting factor (1.0 if none)
      */
-    double limit(double& v, double v0, double v1, double dt);
+    double limit(double& t, double t0, double t1, double dt);
 
     /**
-     * \brief Limit the velocity
-     * \param [in, out] v Velocity [m/s]
+     * \brief Limit the torque 
+     * \param [in, out] t Torque [m/s]
      * \return Limiting factor (1.0 if none)
      */
-    double limit_velocity(double& v);
+    double limit_torque(double& t);
 
     /**
      * \brief Limit the acceleration
@@ -94,7 +97,9 @@ namespace diff_drive_controller_effort
      * \param [in]      dt Time step [s]
      * \return Limiting factor (1.0 if none)
      */
+    /*
     double limit_acceleration(double& v, double v0, double dt);
+    */
 
     /**
      * \brief Limit the jerk
@@ -105,17 +110,21 @@ namespace diff_drive_controller_effort
      * \return Limiting factor (1.0 if none)
      * \see http://en.wikipedia.org/wiki/Jerk_%28physics%29#Motion_control
      */
+    /*
     double limit_jerk(double& v, double v0, double v1, double dt);
+    */
 
   public:
     // Enable/Disable velocity/acceleration/jerk limits:
-    bool has_velocity_limits;
-    bool has_acceleration_limits;
-    bool has_jerk_limits;
+    bool has_torque_limits;
 
     // Velocity limits:
-    double min_velocity;
-    double max_velocity;
+    double min_torque;
+    double max_torque;
+
+    /*
+    bool has_acceleration_limits;
+    bool has_jerk_limits;
 
     // Acceleration limits:
     double min_acceleration;
@@ -124,6 +133,7 @@ namespace diff_drive_controller_effort
     // Jerk limits:
     double min_jerk;
     double max_jerk;
+    */
   };
 
 } // namespace diff_drive_controller
